@@ -1,0 +1,68 @@
+version: '3.8'
+
+# Praxis v0.4 - docker-compose is the "production-like local" path (Postgres +
+# built frontend). For day-to-day development without Docker, run the backend
+# with `uvicorn` and the frontend with `npm run dev` directly - both default
+# to SQLite / localhost, see README.md.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/praxis
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - ENVIRONMENT=development
+      - CORS_ORIGINS=["http://localhost:3000"]
+    volumes:
+      - ./src:/app/src
+      - praxis_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - praxis-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - praxis-network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=praxis
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - praxis-network
+
+volumes:
+  postgres_data:
+  praxis_storage:
+
+networks:
+  praxis-network:
+    driver: bridge
